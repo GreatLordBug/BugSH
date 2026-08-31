@@ -1,6 +1,7 @@
 import time
 import random
 import sys
+import getpass
 import bugsh_fs as bfs
 import nws_api as nws
 from bug_ai.model import BugAIModel, BugAIConversation
@@ -330,7 +331,15 @@ def execute_single_command(cmd_str, execution_user, stdin_content=None):
             su: changes user
             pydo: executes parameter as python
             rodo: runs command as root, equivalent to sudo
-            cwd: prints current working directory"""
+            cwd: prints current working directory
+            setsnap: save a snapshot to host disk (setsnap NAME)
+            opensnap: restore a snapshot from host disk (opensnap NAME)
+            bootconfig: show or edit the boot configuration (bootconfig [show|edit])
+            bootwizard: interactive wizard to create/save boot configuration
+            login: prompt for username/password to switch user
+
+        Packages (internal): time, random, sys, getpass, bugsh_fs, nws_api, bug_ai.model — up to date
+        """
     elif cmd == "sudo":
         return "sudo doesn't exist, try rodo"
     elif cmd == "cwd":
@@ -376,6 +385,52 @@ def execute_single_command(cmd_str, execution_user, stdin_content=None):
             return bfs.cmd_opensnap(args)
         else:
             return "opensnap: missing snapshot name"
+    elif cmd == "bootconfig":
+        # bootconfig show | edit
+        sub = args[0] if len(args) > 0 else "show"
+        boot_node = bfs.get_dir_node("/boot")
+        if boot_node is None:
+            return "bootconfig: /boot not available"
+        if sub == "edit":
+            bfs.run_nano("/boot/boot.cfg")
+            return "boot config edited"
+        elif sub == "show":
+            content = boot_node.get("boot.cfg", "")
+            return content if content else "bootconfig: empty"
+        else:
+            return "bootconfig: usage: bootconfig [show|edit]"
+    elif cmd == "bootwizard":
+        print("Boot Configuration Wizard:")
+        try:
+            timeout = input("Timeout (seconds, blank for 5): ").strip() or "5"
+            default_entry = input("Default entry name (blank for 'default'): ").strip() or "default"
+            recovery = input("Enable recovery entry? (y/n): ").strip().lower() == "y"
+            verbose = input("Enable verbose boot? (y/n): ").strip().lower() == "y"
+            kernel_args = input("Kernel args (optional): ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return "bootwizard cancelled"
+
+        yaml_lines = []
+        yaml_lines.append(f"timeout: {timeout}")
+        yaml_lines.append(f"default_entry: {default_entry}")
+        yaml_lines.append(f"recovery_enabled: {str(recovery).lower()}")
+        yaml_lines.append(f"boot_verbose: {str(verbose).lower()}")
+        yaml_lines.append(f"kernel_args: \"{kernel_args}\"")
+
+        boot_node["boot.cfg"] = "\n".join(yaml_lines)
+        return "boot configuration saved"
+    elif cmd == "login":
+        try:
+            uname = input("login: ").strip()
+            pwd = getpass.getpass("password: ")
+        except (KeyboardInterrupt, EOFError):
+            return "login cancelled"
+        users = bfs.load_users()
+        userrec = users.get(uname)
+        if userrec and str(userrec.get("password", "")) == pwd:
+            current_user = uname
+            return f"login: successful ({uname})"
+        return "login: failed"
     elif cmd == "exit":
         return "BREAK"
     else:
@@ -383,6 +438,14 @@ def execute_single_command(cmd_str, execution_user, stdin_content=None):
 
 def start_install():
     global c
+    # optionally allow loading a snapshot before transferring packages
+    try:
+        snap_name = input("Load snapshot before transfer (snapshot name or blank to skip): ").strip()
+    except (KeyboardInterrupt, EOFError):
+        snap_name = ""
+    if snap_name:
+        print(bfs.cmd_opensnap(snap_name))
+
     print("transferring BugKern v2.4 packages")
     print("setting buginstall to false")
     buginstall = False
@@ -452,6 +515,44 @@ def start_install():
     if not enabler_ers72:
         print("autorm -rfy / --no-preserve-root")
         raise FileNotFoundError("Everything Not Found")
+    # After nano validation, require root password setup / verification
+    users = bfs.load_users()
+    root_rec = users.get("root", {})
+    existing_pwd = str(root_rec.get("password", ""))
+
+    if not existing_pwd:
+        print("No root password set. Please set a root password now.")
+        try:
+            p1 = getpass.getpass("New root password: ")
+            p2 = getpass.getpass("Retype new root password: ")
+        except (KeyboardInterrupt, EOFError):
+            print("Password setup cancelled.")
+            raise FileNotFoundError("Everything Not Found")
+        if p1 != p2 or not p1:
+            print("Passwords did not match or were empty. Aborting install.")
+            raise FileNotFoundError("Everything Not Found")
+        root_rec["password"] = p1
+        root_rec["rodoer"] = True
+        root_rec["rm_rf_perm"] = True
+        users["root"] = root_rec
+        bfs.save_users(users)
+
+    # require entering the root password to finish install
+    attempts = 3
+    while attempts > 0:
+        try:
+            entry = getpass.getpass("Enter root password to continue: ")
+        except (KeyboardInterrupt, EOFError):
+            print("Authentication cancelled.")
+            raise FileNotFoundError("Everything Not Found")
+        if entry == users.get("root", {}).get("password", ""):
+            break
+        attempts -= 1
+        print(f"Incorrect password. {attempts} attempts remaining.")
+    if attempts == 0:
+        print("Too many failed attempts. Aborting.")
+        raise FileNotFoundError("Everything Not Found")
+
     return True
 
 if __name__ == '__main__':
@@ -461,7 +562,27 @@ if __name__ == '__main__':
             print("BugSH Initializing. Do Not Quote any BugSH AI Content in your essays.")
             print("BugSH Terminal Access. You must reinstall every time")
             
-            current_user = "root"
+            # After configuration, require the user to login
+            users = bfs.load_users()
+            logged_in = False
+            for _ in range(3):
+                try:
+                    uname = input("login: ").strip()
+                    pwd = getpass.getpass("password: ")
+                except (KeyboardInterrupt, EOFError):
+                    print("\nLogin cancelled.")
+                    sys.exit(1)
+                urec = users.get(uname)
+                if urec and str(urec.get("password", "")) == pwd:
+                    current_user = uname
+                    logged_in = True
+                    break
+                else:
+                    print("Login failed")
+            if not logged_in:
+                print("Too many failed logins. Exiting.")
+                sys.exit(1)
+
             while True:
                 getc("#" if current_user == "root" else "$")
                 if not c.strip():
