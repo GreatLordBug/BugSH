@@ -21,7 +21,7 @@ with open('main.py', 'r', encoding='utf-8') as main, open('bugsh_fs.py', 'r', en
     sedimenc_fs = {
         "/": {
             "home": {
-                ".userpass.yaml": ""
+                ".userpass.yaml": "root:\n  password: \"\"\n  rodoer: true\n  rm_rf_perm: true\n",
             },
             "dev": {
                 "bugkern1": " part 1 of your compiled kernel ",
@@ -177,6 +177,24 @@ def load_users():
                 except Exception:
                     continue # Skip malformed YAML configuration lines silently
     return users
+
+def save_users(users: dict):
+    """Serialize and save the users dictionary back into the in-memory '.userpass.yaml'."""
+    try:
+        home_node = fs["/"].get("home", {})
+    except Exception:
+        return False
+
+    new_yaml_lines = []
+    for u, data in users.items():
+        new_yaml_lines.append(f"{u}:")
+        new_yaml_lines.append(f"  password: \"{data.get('password', '')}\"")
+        new_yaml_lines.append(f"  rodoer: {str(data.get('rodoer', False)).lower()}")
+        new_yaml_lines.append(f"  rm_rf_perm: {str(data.get('rm_rf_perm', False)).lower()}")
+
+    home_node[".userpass.yaml"] = "\n".join(new_yaml_lines)
+    fs["/"]["home"] = home_node
+    return True
 
 def is_user_rodoer(user):
     if user == "root":
