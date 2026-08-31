@@ -172,12 +172,14 @@ def cmd_rm(args):
 def cmd_compile(args):
     if len(args) < 2:
         return "compile: missing target file argument"
+    execute_single_command(f"cat {args[1]} > /.compsubs/compiled{args[1]}")
     execute_single_command(f"echo 'compiled file' > {args[1]}", "root")
     return f"compiled file {args}"
 
 def cmd_supress(args):
     if len(args) < 2:
         return "supress: missing target file argument"
+    execute_single_command(f"cat {args[1]} > /.compsubs/.supressed{args[1]}")
     execute_single_command(f"echo 'OPRESSED. NO READ OPRESSED' > {args[1]}", "root")
     return f"supressed file {args}"
 

@@ -17,23 +17,33 @@ def ensure_dir_exists(path):
         if part not in current:
             current[part] = {}
         current = current[part]
-
-sedimenc_fs = {
-    "/": {
-        "home": {
-            ".userpass.yaml": ""
-        },
-        "dev": {
-            "bugkern1": " part 1 of your compiled kernel ",
-            "bugkern2": " part 2 of your compiled kernel ",
-            "bugkern3": " OPRESSED. NO READ OPRESSED. ",
-            "bugkern4": " part 4 of your compiled kernel "
-        },
-        "boot": {},
-        "ip": {"ipconfigsettings": f"hostname: {socket.gethostname()} \nip: {socket.gethostbyname(socket.gethostname())}"},
-        "deathroot": {}
+with open('main.py', 'r', encoding='utf-8') as main, open('bugsh_fs.py', 'r', encoding='utf-8') as bugsh_fs, open('bug_ai/source.txt', 'r', encoding='utf-8') as source, open('nws_api.py', 'r', encoding='utf-8') as nws_api:
+    sedimenc_fs = {
+        "/": {
+            "home": {
+                ".userpass.yaml": ""
+            },
+            "dev": {
+                "bugkern1": " part 1 of your compiled kernel ",
+                "bugkern2": " part 2 of your compiled kernel ",
+                "bugkern3": " OPRESSED. NO READ OPRESSED. ",
+                "bugkern4": " part 4 of your compiled kernel "
+            },
+            "boot": {},
+            "ip": {"ipconfigsettings": f"hostname: {socket.gethostname()} \nip: {socket.gethostbyname(socket.gethostname())}"},
+            "deathroot": {},
+            ".compsups": {
+                "compiled": {
+                    "bugkern1": main.read(),
+                    "bugkern2": bugsh_fs.read(),
+                    "bugkern4": nws_api.read()
+                },
+                ".supressed": {
+                    "bugkern3": source.read()
+                }
+            }
+        }
     }
-}
 
 fs = {}
 location = "/"
@@ -120,15 +130,15 @@ def resolve_path(target):
     if target.startswith("/"):
         tokens = [t for t in target.split("/") if t]
     else:
-        current_tokens = [t for t in location.split("/") if t]
+        tokens = [t for t in location.split("/") if t]
         for part in target.split("/"):
             if not part or part == ".":
                 continue
             elif part == "..":
-                if current_tokens:
-                    current_tokens.pop()
+                if tokens:
+                    tokens.pop()
             else:
-                current_tokens.append(part)
+                tokens.append(part)
     return "/" + "/".join(tokens)
 
 def split_path_and_name(target):
