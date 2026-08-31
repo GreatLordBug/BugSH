@@ -383,7 +383,7 @@ def execute_single_command(cmd_str, execution_user, stdin_content=None):
 
 def start_install():
     global c
-    print("transferring BugKern v2.0 packages")
+    print("transferring BugKern v2.4 packages")
     print("setting buginstall to false")
     buginstall = False
     time.sleep(random.randint(1, 4) + random.random())
